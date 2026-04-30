@@ -22,32 +22,36 @@ export default async function handler(req, res) {
     if (!nama || typeof nama !== 'string' || nama.trim().length < 2) {
       return res.status(400).json({ error: 'Nama tidak valid (minimal 2 karakter)' });
     }
+    if (!kelas || typeof kelas !== 'string' || kelas.trim().length < 1) {
+      return res.status(400).json({ error: 'Kelas wajib diisi' });
+    }
     if (!Array.isArray(checkedItems)) {
       return res.status(400).json({ error: 'checkedItems harus berupa array' });
     }
 
     const namaBersih  = nama.trim().substring(0, 100);
-    const kelasBersih = (kelas || '').trim().substring(0, 20);
+    const kelasBersih = kelas.trim().substring(0, 20);
+    const checkedItemsValid = checkedItems
+      .filter((i) => Number.isInteger(i) && i >= 0 && i < TOTAL_ITEMS);
 
     // Hitung skor
-    const jumlahCentang = checkedItems.filter(
-      (i) => typeof i === 'number' && i >= 0 && i < TOTAL_ITEMS
-    ).length;
+    const jumlahCentang = checkedItemsValid.length;
 
-    const skor     = Math.round((jumlahCentang / TOTAL_ITEMS) * 100);
+    const skor     = Number(Math.round((jumlahCentang / TOTAL_ITEMS) * 100));
     const kategori = hitungKategori(skor);
+    const payload = {
+      nama: namaBersih,
+      kelas: kelasBersih,
+      skor,
+      jumlah_centang: jumlahCentang,
+      total_item: TOTAL_ITEMS,
+      checked_items: checkedItemsValid,
+      kategori,
+    };
 
     const { data: saved, error } = await supabase
       .from('checklist_results')
-      .insert({
-        nama: namaBersih,
-        kelas: kelasBersih,
-        skor,
-        jumlah_centang: jumlahCentang,
-        total_item: TOTAL_ITEMS,
-        checked_items: checkedItems,
-        kategori,
-      })
+      .insert(payload)
       .select('id')
       .single();
 
@@ -65,6 +69,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[/api/submit] error:', err);
-    return res.status(500).json({ error: 'Gagal menyimpan data. Coba lagi.' });
+    return res.status(500).json({
+      error: err.message || 'Gagal menyimpan data. Coba lagi.',
+      detail: err.details || err.hint || err.code || null,
+    });
   }
 }
